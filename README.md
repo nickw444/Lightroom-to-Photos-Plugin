@@ -20,3 +20,6 @@ Intends to replace my crude "[`syncpics.py`](./syncpics/syncpics.py)" script whi
 * https://github.com/matiaskorhonen/custom-photo-importer: Prior art for dealing with Apple Photos metadata
 * https://github.com/Jaid/lightroom-sdk-8-examples
 * https://github.com/bmachek/lrc-immich-plugin
+* https://akrabat.com/writing-a-lightroom-classic-plug-in/
+* https://developer.adobe.com/console/servicesandapis
+* http://regex.info/blog/lightroom-goodies/run-any-command
