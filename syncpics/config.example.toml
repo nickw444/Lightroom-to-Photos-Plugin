@@ -1,0 +1,12 @@
+[syncpics]
+
+source = "/Volumes/speedy/Pictures/Lightroom"
+destination = "/Volumes/speedy/Pictures/Canon HEIF"
+excludes = [
+    "2023/**/*",
+    "2024/2024-01-01/*",
+    "2024/2024-01-02/*",
+    "2024/2024-01-03/*",
+    "2024/2024-01-04/*",
+    "2024/2024-01-06/*",
+]
