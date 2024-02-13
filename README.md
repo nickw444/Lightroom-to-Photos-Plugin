@@ -1,6 +1,8 @@
 # Lightroom to Photos Plugin
 
-A Lightroom Export Plugin to add support for direct export to Apple Photos with HEIC conversion for iCloud storage optimisation.
+A Lightroom Export Plugin to add support for direct export to Apple Photos with HEIC conversion for iCloud storage optimisation. 
+
+Intends to replace my crude "syncpics.py" script which goes through my Lightroom photos directory and mirrors it into another folder, converts all JPEGs it finds into HEIC equivalents.
 
 ### Features
 
