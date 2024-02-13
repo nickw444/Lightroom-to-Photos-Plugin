@@ -9,6 +9,9 @@ Intends to replace my crude "syncpics.py" script which goes through my Lightroom
 * Export Lightroom photos directly to Apple Photos
 * Export corresponding unprocessed camera JPEGs (if preferred). Personally I prefer Canon's JPEG colour over Lightroom's camera matching profile, so prefer this as an option to making global edits for documentary/non-artistic shots.
 
+### Goals
+
+* Ideally support contextually aware export: For photos _with_ edits, export the RAW to JPEG/HEIC. For photos _without_ edits, export the unprocessed camera JPEG.
 
 ### Existing Plugins / Research
 
