@@ -43,7 +43,7 @@ function M.editedDestFor(photo, quality, origPath)
   local okDS, ds = LrTasks.pcall(function() return photo:getDevelopSettings() end)
   local canon = canonicalize_develop_settings(okDS and ds or {})
   local key = photo_uuid(photo) .. '|' .. tostring(qInt) .. '|' .. canon
-  local digest = Hash.tohex(Hash.crc32(key))
+  local digest = Hash.md5(key)
   local dir = LrPathUtils.parent(origPath or '') or LrPathUtils.getStandardFilePath('temp')
   local hiddenDir = LrPathUtils.child(dir, '.photos-heic')
   if not LrFileUtils.exists(hiddenDir) then
@@ -56,4 +56,3 @@ function M.editedDestFor(photo, quality, origPath)
 end
 
 return M
-
