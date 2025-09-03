@@ -6,6 +6,7 @@ local LrFunctionContext = import 'LrFunctionContext'
 
 local HeicConverter = require 'HeicConverter'
 local SourceSelector = require 'SourceSelector'
+local PhotosImporter = require 'PhotosImporter'
 local logger = require 'Logger'
 
 local provider = {}
@@ -15,6 +16,8 @@ provider.startDialog = function(propertyTable)
     if propertyTable.convertToHEIC == nil then propertyTable.convertToHEIC = false end
     if propertyTable.heicQuality == nil then propertyTable.heicQuality = 0.95 end
     if propertyTable.albumName == nil then propertyTable.albumName = '/Lightroom/Review' end
+    if propertyTable.exportToPhotos == nil then propertyTable.exportToPhotos = true end
+    if propertyTable.openAlbumAfterImport == nil then propertyTable.openAlbumAfterImport = true end
     if propertyTable.preferCameraJPEG == nil then propertyTable.preferCameraJPEG = true end
     if propertyTable.forceCameraJPEGIfSibling == nil then propertyTable.forceCameraJPEGIfSibling = false end
     if propertyTable.debugAnnotateFilenames == nil then propertyTable.debugAnnotateFilenames = true end
@@ -29,6 +32,8 @@ provider.exportPresetFields = {
     { key = 'convertToHEIC', default = false },
     { key = 'heicQuality', default = 0.95 },
     { key = 'albumName', default = '/Lightroom/Review' },
+    { key = 'exportToPhotos', default = true },
+    { key = 'openAlbumAfterImport', default = true },
     { key = 'preferCameraJPEG', default = true },
     { key = 'forceCameraJPEGIfSibling', default = false },
     { key = 'debugAnnotateFilenames', default = true },
@@ -46,6 +51,11 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
                 vf:row { vf:checkbox { title = 'Force camera JPEG if sibling exists (debug)', value = bind 'forceCameraJPEGIfSibling' } },
                 vf:spacer { height = 8 },
 
+                vf:row { vf:checkbox { title = 'Import to Apple Photos after export', value = bind 'exportToPhotos' } },
+                vf:row { vf:static_text { title = 'Album:', width_in_chars = 18, alignment = 'right' }, vf:edit_field { value = bind 'albumName', width_in_chars = 32 } },
+                vf:row { vf:checkbox { title = 'Open album after import', value = bind 'openAlbumAfterImport' } },
+
+                vf:spacer { height = 8 },
                 vf:row {
                     vf:checkbox { title = 'Convert to HEIC (via sips)', value = bind 'convertToHEIC' },
                     vf:spacer { width = 12 },
@@ -56,10 +66,8 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
 
                 vf:spacer { height = 6 },
                 vf:row { vf:checkbox { title = 'Annotate filenames with source (debug)', value = bind 'debugAnnotateFilenames' } },
-                vf:row { vf:static_text { title = 'Album (not used yet):', width_in_chars = 18, alignment = 'right' }, vf:edit_field { value = bind 'albumName', width_in_chars = 32 } },
-
                 vf:spacer { height = 8 },
-                vf:static_text { title = 'Wireframe: Export runs and optionally creates HEIC copies. Import to Photos is not implemented yet.' },
+                vf:static_text { title = 'Wireframe: Export runs, optionally creates HEIC copies, and can import to Photos.' },
             },
         },
     }
@@ -153,8 +161,24 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
         end
     end
 
+    -- Optionally import to Photos
+    local importOk, importRc, albumShown
+    if props.exportToPhotos and #finalPaths > 0 then
+        logger:info('Starting import to Photos, count=' .. tostring(#finalPaths) .. ' album=' .. tostring(props.albumName))
+        PhotosImporter.ensureAutomationPermission()
+        importOk, importRc = PhotosImporter.import(finalPaths, props.albumName)
+        if importOk and props.openAlbumAfterImport and props.albumName and props.albumName ~= '' then
+            PhotosImporter.showAlbum(props.albumName)
+            albumShown = true
+        end
+    end
+
     LrFunctionContext.postAsyncTaskWithContext('LTP_Wireframe_ExportDone', function()
-        local summary = string.format('Processed %d photo(s). Rendered: %d, Reused JPEG: %d, HEIC conversions: %d.\nNote: This wireframe does not import to Photos yet.', totalCount, renderedCount, reusedCount, heicCount)
+        local importSummary = ''
+        if props.exportToPhotos then
+            importSummary = string.format('\nImported to Photos: %s (rc=%s)%s', tostring(importOk), tostring(importRc), albumShown and ' and opened album' or '')
+        end
+        local summary = string.format('Processed %d photo(s). Rendered: %d, Reused JPEG: %d, HEIC conversions: %d.%s', totalCount, renderedCount, reusedCount, heicCount, importSummary)
         logger:info('Export summary: ' .. summary)
         LrDialogs.message(
             'Lightroom to Photos – Export Complete',
