@@ -1,5 +1,6 @@
 local LrFileUtils = import 'LrFileUtils'
 local LrPathUtils = import 'LrPathUtils'
+local logger = require 'Logger'
 
 local M = {}
 
@@ -61,24 +62,40 @@ function M.choose(photo, opts)
     local okFmt, fileFormat = pcall(function() return photo:getRawMetadata('fileFormat') end)
     local dir, stem, origPath = get_dir_and_stem(photo)
     local sibling = sibling_jpeg_for(origPath, dir, stem)
+    local okName, fileName = pcall(function() return photo:getFormattedMetadata('fileName') end)
+
+    logger:trace(string.format(
+        'SourceSelector.choose: file=%s edited=%s fileFormat=%s origPath=%s sibling=%s preferCameraJPEG=%s forceIfSibling=%s',
+        tostring(okName and fileName or '?'), tostring(edited), tostring(okFmt and fileFormat or '?'), tostring(origPath), tostring(sibling), tostring(opts.preferCameraJPEG), tostring(opts.forceIfSibling)
+    ))
 
     -- For unedited images, prefer camera JPEG if available.
     if not edited then
         if okFmt and fileFormat == 'JPEG' and origPath and LrFileUtils.exists(origPath) then
-            return { useRendered = false, sourcePath = origPath, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'catalog JPEG (no edits)' }
+            local result = { useRendered = false, sourcePath = origPath, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'catalog JPEG (no edits)' }
+            logger:info(string.format('SourceSelector.decision: file=%s useRendered=%s source=%s reason=%s', tostring(okName and fileName or '?'), tostring(result.useRendered), tostring(result.sourcePath), tostring(result.reason)))
+            return result
         end
         if sibling then
-            return { useRendered = false, sourcePath = sibling, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'sibling JPEG (no edits)' }
+            local result = { useRendered = false, sourcePath = sibling, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'sibling JPEG (no edits)' }
+            logger:info(string.format('SourceSelector.decision: file=%s useRendered=%s source=%s reason=%s', tostring(okName and fileName or '?'), tostring(result.useRendered), tostring(result.sourcePath), tostring(result.reason)))
+            return result
         end
     end
 
     -- Debug/override: force sibling JPEG regardless of edits if present.
     if opts.forceIfSibling and sibling then
-        return { useRendered = false, sourcePath = sibling, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'forced sibling JPEG' }
+        local result = { useRendered = false, sourcePath = sibling, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'forced sibling JPEG' }
+        logger:info(string.format('SourceSelector.decision: file=%s useRendered=%s source=%s reason=%s', tostring(okName and fileName or '?'), tostring(result.useRendered), tostring(result.sourcePath), tostring(result.reason)))
+        return result
     end
 
-    return { useRendered = true, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = edited and 'edited' or 'no sibling JPEG' }
+    local result = { useRendered = true, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = edited and 'edited' or 'no sibling JPEG' }
+    logger:trace(string.format(
+        'SourceSelector.decision: file=%s useRendered=%s source=%s reason=%s',
+        tostring(okName and fileName or '?'), tostring(result.useRendered), tostring(result.sourcePath), tostring(result.reason)
+    ))
+    return result
 end
 
 return M
-

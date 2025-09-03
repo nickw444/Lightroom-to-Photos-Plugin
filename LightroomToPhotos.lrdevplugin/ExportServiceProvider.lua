@@ -6,6 +6,7 @@ local LrFunctionContext = import 'LrFunctionContext'
 
 local HeicConverter = require 'HeicConverter'
 local SourceSelector = require 'SourceSelector'
+local logger = require 'Logger'
 
 local provider = {}
 
@@ -78,6 +79,9 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     local renderedCount = 0
     local decisions = {}
 
+    logger:info(string.format('Export started: nPhotos=%d preferCameraJPEG=%s forceCameraJPEGIfSibling=%s convertToHEIC=%s quality=%.2f annotate=%s',
+        nPhotos, tostring(props.preferCameraJPEG), tostring(props.forceCameraJPEGIfSibling), tostring(props.convertToHEIC), tonumber(props.heicQuality or 0), tostring(props.debugAnnotateFilenames)))
+
     local function annotatedHeicPath(srcPath, tag)
         local tempDir = LrPathUtils.getStandardFilePath('temp')
         local leaf = LrPathUtils.leafName(srcPath or 'file')
@@ -99,7 +103,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
         local photo = rendition.photo
         local choice = { useRendered = true }
         if props.preferCameraJPEG or props.forceCameraJPEGIfSibling then
-            choice = SourceSelector.choose(photo, { forceIfSibling = props.forceCameraJPEGIfSibling })
+            choice = SourceSelector.choose(photo, { forceIfSibling = props.forceCameraJPEGIfSibling, preferCameraJPEG = props.preferCameraJPEG })
         end
 
         local basePath = nil
@@ -109,15 +113,21 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             if success and pathOrMessage then
                 basePath = pathOrMessage
                 renderedCount = renderedCount + 1
+                logger:trace(string.format('Rendered from LR: file=%s path=%s reason=%s edited=%s format=%s sibling=%s',
+                    tostring(photo and photo:getFormattedMetadata('fileName') or '?'), tostring(basePath), tostring(choice.reason), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath)))
             else
                 rendition:skipRender()
-                decisions[#decisions + 1] = string.format('%s: render failed / skipped (edited=%s, fileFormat=%s, sibling=%s, reason=%s)', (photo and photo:getFormattedMetadata('fileName') or '?'), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath), tostring(choice.reason))
+                local msg = string.format('%s: render failed / skipped (edited=%s, fileFormat=%s, sibling=%s, reason=%s)', (photo and photo:getFormattedMetadata('fileName') or '?'), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath), tostring(choice.reason))
+                decisions[#decisions + 1] = msg
+                logger:warn(msg)
             end
         else
             rendition:skipRender()
             basePath = choice.sourcePath
             srcTag = 'SRC-CAM'
             if basePath then reusedCount = reusedCount + 1 end
+            logger:info(string.format('Reused camera JPEG: file=%s path=%s reason=%s edited=%s format=%s sibling=%s',
+                tostring(photo and photo:getFormattedMetadata('fileName') or '?'), tostring(basePath), tostring(choice.reason), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath)))
         end
 
         if basePath then
@@ -131,6 +141,9 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
                 if ok and heicPath then
                     outPath = heicPath
                     heicCount = heicCount + 1
+                    logger:trace(string.format('Converted to HEIC: from=%s to=%s', tostring(basePath), tostring(outPath)))
+                else
+                    logger:warn(string.format('HEIC conversion failed rc or missing output: from=%s', tostring(basePath)))
                 end
             end
             finalPaths[#finalPaths + 1] = outPath
@@ -139,9 +152,11 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     end
 
     LrFunctionContext.postAsyncTaskWithContext('LTP_Wireframe_ExportDone', function()
+        local summary = string.format('Processed %d photo(s). Rendered: %d, Reused JPEG: %d, HEIC conversions: %d.\nNote: This wireframe does not import to Photos yet.', nPhotos, renderedCount, reusedCount, heicCount)
+        logger:info('Export summary: ' .. summary)
         LrDialogs.message(
             'Lightroom to Photos – Export Complete',
-            string.format('Processed %d photo(s). Rendered: %d, Reused JPEG: %d, HEIC conversions: %d.\nNote: This wireframe does not import to Photos yet.', nPhotos, renderedCount, reusedCount, heicCount),
+            summary,
             'info'
         )
     end)

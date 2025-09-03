@@ -1,6 +1,7 @@
 local LrTasks = import 'LrTasks'
 local LrPathUtils = import 'LrPathUtils'
 local LrFileUtils = import 'LrFileUtils'
+local logger = require 'Logger'
 
 local M = {}
 
@@ -41,13 +42,15 @@ function M.convert(srcPath, opts)
     local cmd = "/usr/bin/sips -s format heic -s formatOptions " .. tostring(percent) ..
         " " .. shell_quote(srcPath) .. " --out " .. shell_quote(destPath)
 
+    logger:trace('HeicConverter: ' .. cmd)
     local rc = LrTasks.execute(cmd)
     if rc == 0 and LrFileUtils.exists(destPath) then
+        logger:trace('HeicConverter: success -> ' .. tostring(destPath))
         return true, destPath
     else
+        logger:warn('HeicConverter: failed rc=' .. tostring(rc))
         return false, 'sips failed rc=' .. tostring(rc)
     end
 end
 
 return M
-
