@@ -20,6 +20,12 @@ local function safe_has_develop_adjustments(photo)
     -- Heuristic fallback: inspect develop settings for obvious non-defaults.
     local okDS, ds = LrTasks.pcall(function() return photo:getDevelopSettings() end)
     if okDS and type(ds) == 'table' then
+        -- White balance: any mode other than 'As Shot' implies an edit
+        local wb = ds.WhiteBalance
+        if type(wb) == 'string' and wb ~= 'As Shot' then
+            logger:trace('Heuristic: treat as edited due to WhiteBalance=' .. tostring(wb))
+            return true
+        end
         -- Cropping: only treat as edited if explicit HasCrop true, or angle non-zero,
         -- or crop bounds differ from defaults (0,0,1,1) by a meaningful margin.
         local hasCrop = (type(ds.HasCrop) == 'boolean' and ds.HasCrop == true)
