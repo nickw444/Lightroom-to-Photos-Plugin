@@ -122,19 +122,23 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             if props.convertToHEIC and basePath then
                 local ok, heicPath
                 if srcTag == 'SRC-CAM' then
-                    -- For unedited photos using camera JPEG, generate/reuse HEIC alongside the JPEG
+                    -- For unedited photos using camera JPEG, generate/reuse HEIC in a hidden subfolder next to the JPEG
                     local dir = LrPathUtils.parent(basePath)
                     local leaf = LrPathUtils.leafName(basePath)
                     local stem = leaf:gsub('%.[^%.]+$', '')
-                    local siblingHeic = LrPathUtils.child(dir, stem .. '.HEIC')
-                    if LrFileUtils.exists(siblingHeic) then
-                        logger:info('Reuse existing HEIC sibling: ' .. tostring(siblingHeic))
-                        ok, heicPath = true, siblingHeic
+                    local hiddenDir = LrPathUtils.child(dir, '.photos-heic')
+                    if not LrFileUtils.exists(hiddenDir) then
+                        LrFileUtils.createAllDirectories(hiddenDir)
+                    end
+                    local hiddenHeic = LrPathUtils.child(hiddenDir, stem .. '.HEIC')
+                    if LrFileUtils.exists(hiddenHeic) then
+                        logger:info('Reuse existing HEIC in hidden folder: ' .. tostring(hiddenHeic))
+                        ok, heicPath = true, hiddenHeic
                     else
-                        ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality, destPath = siblingHeic })
+                        ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality, destPath = hiddenHeic })
                         if not ok then
-                            -- Fallback to temp location if writing beside JPEG fails
-                            logger:warn('Failed to create sibling HEIC, falling back to temp for ' .. tostring(basePath))
+                            -- Fallback to temp location if writing hidden HEIC fails
+                            logger:warn('Failed to create hidden HEIC, falling back to temp for ' .. tostring(basePath))
                             ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality })
                         end
                     end
