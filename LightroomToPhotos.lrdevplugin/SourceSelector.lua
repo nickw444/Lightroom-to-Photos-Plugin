@@ -107,8 +107,7 @@ end
 
 -- Decide whether to render from Lightroom or reuse camera JPEG.
 -- Returns table: { useRendered = boolean, sourcePath = string|nil, edited, fileFormat, origPath, siblingPath, reason }
-function M.choose(photo, opts)
-    opts = opts or {}
+function M.choose(photo, _)
     if not photo then return { useRendered = true, reason = 'no photo' } end
 
     local edited = safe_has_develop_adjustments(photo)
@@ -118,8 +117,8 @@ function M.choose(photo, opts)
     local okName, fileName = LrTasks.pcall(function() return photo:getFormattedMetadata('fileName') end)
 
     logger:trace(string.format(
-        'SourceSelector.choose: file=%s edited=%s fileFormat=%s origPath=%s dir=%s stem=%s sibling=%s preferCameraJPEG=%s forceIfSibling=%s',
-        tostring(okName and fileName or '?'), tostring(edited), tostring(okFmt and fileFormat or '?'), tostring(origPath), tostring(dir), tostring(stem), tostring(sibling), tostring(opts.preferCameraJPEG), tostring(opts.forceIfSibling)
+        'SourceSelector.choose: file=%s edited=%s fileFormat=%s origPath=%s dir=%s stem=%s sibling=%s',
+        tostring(okName and fileName or '?'), tostring(edited), tostring(okFmt and fileFormat or '?'), tostring(origPath), tostring(dir), tostring(stem), tostring(sibling)
     ))
 
     -- For unedited images, prefer camera JPEG if available.
@@ -134,13 +133,6 @@ function M.choose(photo, opts)
             logger:info(string.format('SourceSelector.decision: file=%s useRendered=%s source=%s reason=%s', tostring(okName and fileName or '?'), tostring(result.useRendered), tostring(result.sourcePath), tostring(result.reason)))
             return result
         end
-    end
-
-    -- Debug/override: force sibling JPEG regardless of edits if present.
-    if opts.forceIfSibling and sibling then
-        local result = { useRendered = false, sourcePath = sibling, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'forced sibling JPEG' }
-        logger:info(string.format('SourceSelector.decision: file=%s useRendered=%s source=%s reason=%s', tostring(okName and fileName or '?'), tostring(result.useRendered), tostring(result.sourcePath), tostring(result.reason)))
-        return result
     end
 
     local result = { useRendered = true, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = edited and 'edited' or 'no sibling JPEG' }

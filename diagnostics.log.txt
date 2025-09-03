@@ -1,0 +1,12 @@
+Plug-in error log for plug-in at: /Users/nickw/repos/Lightroom-to-Photos-Plugin/LightroomToPhotos.lrdevplugin
+
+**** Error 1
+
+An error occurred while attempting to run one of the plug-in’s scripts.
+Hash.lua:9: ')' expected near '&')
+
+**** Error 2
+
+Could not load the post-processing filter from this plug-in.
+Hash.lua:9: ')' expected near '&')
+

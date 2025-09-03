@@ -60,7 +60,6 @@ end
 provider.hideSections = { 'exportLocation', 'fileNaming', 'video', 'watermarking', 'postProcessing', 'outputSharpening' }
 
 provider.processRenderedPhotos = function(functionContext, exportContext)
-    local exportSession = exportContext.exportSession
     local props = exportContext.propertyTable or {}
 
     local finalPaths = {}
@@ -69,7 +68,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     local heicCount = 0
     local reusedCount = 0
     local renderedCount = 0
-    local decisions = {}
+    
 
     logger:info(string.format('Export started: preferCameraJPEG=%s convertToHEIC=%s quality=%.2f',
         tostring(props.preferCameraJPEG), tostring(props.convertToHEIC), tonumber(props.heicQuality or 0)))
@@ -91,7 +90,6 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
         local success, pathOrMessage = rendition:waitForRender()
         if not success then
             local msg = string.format('%s: render failed (edited=%s, fileFormat=%s, sibling=%s, reason=%s)', (photo and photo:getFormattedMetadata('fileName') or '?'), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath), tostring(choice.reason))
-            decisions[#decisions + 1] = msg
             logger:warn(msg)
         else
             local basePath
@@ -161,7 +159,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             else
                 finalCamera[#finalCamera + 1] = outPath
             end
-            decisions[#decisions + 1] = string.format('%s: %s -> %s', (photo and photo:getFormattedMetadata('fileName') or '?'), srcTag or 'SRC-UNK', outPath)
+            
         end
     end
 
