@@ -20,7 +20,7 @@ provider.startDialog = function(propertyTable)
     if propertyTable.openAlbumAfterImport == nil then propertyTable.openAlbumAfterImport = true end
     if propertyTable.preferCameraJPEG == nil then propertyTable.preferCameraJPEG = true end
     if propertyTable.forceCameraJPEGIfSibling == nil then propertyTable.forceCameraJPEGIfSibling = false end
-    if propertyTable.debugAnnotateFilenames == nil then propertyTable.debugAnnotateFilenames = true end
+    if propertyTable.debugAnnotateFilenames == nil then propertyTable.debugAnnotateFilenames = false end
 
     -- Encourage Lightroom to render to a temp location and not prompt on collisions
     if propertyTable.LR_export_destinationType == nil then propertyTable.LR_export_destinationType = 'temporary' end
@@ -36,14 +36,14 @@ provider.exportPresetFields = {
     { key = 'openAlbumAfterImport', default = true },
     { key = 'preferCameraJPEG', default = true },
     { key = 'forceCameraJPEGIfSibling', default = false },
-    { key = 'debugAnnotateFilenames', default = true },
+    { key = 'debugAnnotateFilenames', default = false },
 }
 
 provider.sectionsForTopOfDialog = function(vf, propertyTable)
     local bind = LrView.bind
     return {
         {
-            title = 'Lightroom to Photos – Wireframe',
+            title = 'Lightroom to Photos',
             vf:column {
                 spacing = vf:control_spacing(),
 

@@ -21,10 +21,10 @@ return {
         },
     },
 
-    -- Minimal export service scaffold
+    -- Export service
     LrExportServiceProvider = {
-        title = 'Photos (HEIC) – Wireframe',
+        title = 'Apple Photos (HEIC)',
         file = 'ExportServiceProvider.lua',
-        id = 'com.nickwhyte.photos-wireframe',
+        id = 'com.nickwhyte.lightroom-to-photos.export',
     },
 }
