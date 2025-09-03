@@ -19,7 +19,6 @@ provider.startDialog = function(propertyTable)
     if propertyTable.exportToPhotos == nil then propertyTable.exportToPhotos = true end
     if propertyTable.openAlbumAfterImport == nil then propertyTable.openAlbumAfterImport = true end
     if propertyTable.preferCameraJPEG == nil then propertyTable.preferCameraJPEG = true end
-    if propertyTable.forceCameraJPEGIfSibling == nil then propertyTable.forceCameraJPEGIfSibling = false end
 
     -- Encourage Lightroom to render to a temp location and not prompt on collisions
     if propertyTable.LR_export_destinationType == nil then propertyTable.LR_export_destinationType = 'temporary' end
@@ -34,7 +33,6 @@ provider.exportPresetFields = {
     { key = 'exportToPhotos', default = true },
     { key = 'openAlbumAfterImport', default = true },
     { key = 'preferCameraJPEG', default = true },
-    { key = 'forceCameraJPEGIfSibling', default = false },
 }
 
 provider.sectionsForTopOfDialog = function(vf, propertyTable)
@@ -46,7 +44,6 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
                 spacing = vf:control_spacing(),
 
                 vf:row { vf:checkbox { title = 'Prefer camera JPEG when no edits', value = bind 'preferCameraJPEG' } },
-                vf:row { vf:checkbox { title = 'Force camera JPEG if sibling exists (debug)', value = bind 'forceCameraJPEGIfSibling' } },
                 vf:spacer { height = 8 },
 
                 vf:row { vf:checkbox { title = 'Import to Apple Photos after export', value = bind 'exportToPhotos' } },
@@ -83,8 +80,8 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     local renderedCount = 0
     local decisions = {}
 
-    logger:info(string.format('Export started: preferCameraJPEG=%s forceCameraJPEGIfSibling=%s convertToHEIC=%s quality=%.2f',
-        tostring(props.preferCameraJPEG), tostring(props.forceCameraJPEGIfSibling), tostring(props.convertToHEIC), tonumber(props.heicQuality or 0)))
+    logger:info(string.format('Export started: preferCameraJPEG=%s convertToHEIC=%s quality=%.2f',
+        tostring(props.preferCameraJPEG), tostring(props.convertToHEIC), tonumber(props.heicQuality or 0)))
 
     -- No debug filename annotation; rely on HeicConverter default output path.
 
@@ -96,8 +93,8 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
         local photo = rendition.photo
 
         local choice = { useRendered = true }
-        if props.preferCameraJPEG or props.forceCameraJPEGIfSibling then
-            choice = SourceSelector.choose(photo, { forceIfSibling = props.forceCameraJPEGIfSibling, preferCameraJPEG = props.preferCameraJPEG })
+        if props.preferCameraJPEG then
+            choice = SourceSelector.choose(photo)
         end
 
         local success, pathOrMessage = rendition:waitForRender()
