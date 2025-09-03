@@ -78,6 +78,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     local reusedCount = 0
     local renderedCount = 0
     local decisions = {}
+    local renderItems = {}
 
     logger:info(string.format('Export started: nPhotos=%d preferCameraJPEG=%s forceCameraJPEGIfSibling=%s convertToHEIC=%s quality=%.2f annotate=%s',
         nPhotos, tostring(props.preferCameraJPEG), tostring(props.forceCameraJPEGIfSibling), tostring(props.convertToHEIC), tonumber(props.heicQuality or 0), tostring(props.debugAnnotateFilenames)))
@@ -99,6 +100,8 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
         return dest
     end
 
+    -- Pass 1: Decide per-photo and call skipRender() for any we will reuse,
+    -- before starting any rendering via waitForRender().
     for _, rendition in exportContext:renditions { stopIfCanceled = true } do
         local photo = rendition.photo
         local choice = { useRendered = true }
@@ -109,18 +112,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
         local basePath = nil
         local srcTag = 'SRC-LR'
         if choice.useRendered then
-            local success, pathOrMessage = rendition:waitForRender()
-            if success and pathOrMessage then
-                basePath = pathOrMessage
-                renderedCount = renderedCount + 1
-                logger:trace(string.format('Rendered from LR: file=%s path=%s reason=%s edited=%s format=%s sibling=%s',
-                    tostring(photo and photo:getFormattedMetadata('fileName') or '?'), tostring(basePath), tostring(choice.reason), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath)))
-            else
-                rendition:skipRender()
-                local msg = string.format('%s: render failed / skipped (edited=%s, fileFormat=%s, sibling=%s, reason=%s)', (photo and photo:getFormattedMetadata('fileName') or '?'), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath), tostring(choice.reason))
-                decisions[#decisions + 1] = msg
-                logger:warn(msg)
-            end
+            renderItems[#renderItems + 1] = { rendition = rendition, photo = photo, choice = choice }
         else
             rendition:skipRender()
             basePath = choice.sourcePath
@@ -128,14 +120,47 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             if basePath then reusedCount = reusedCount + 1 end
             logger:info(string.format('Reused camera JPEG: file=%s path=%s reason=%s edited=%s format=%s sibling=%s',
                 tostring(photo and photo:getFormattedMetadata('fileName') or '?'), tostring(basePath), tostring(choice.reason), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath)))
+            
+            if basePath then
+                local outPath = basePath
+                if props.convertToHEIC then
+                    local dest = nil
+                    if props.debugAnnotateFilenames then
+                        dest = annotatedHeicPath(basePath, srcTag)
+                    end
+                    local ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality, destPath = dest })
+                    if ok and heicPath then
+                        outPath = heicPath
+                        heicCount = heicCount + 1
+                        logger:trace(string.format('Converted to HEIC: from=%s to=%s', tostring(basePath), tostring(outPath)))
+                    else
+                        logger:warn(string.format('HEIC conversion failed rc or missing output: from=%s', tostring(basePath)))
+                    end
+                end
+                finalPaths[#finalPaths + 1] = outPath
+                decisions[#decisions + 1] = string.format('%s: %s -> %s', (photo and photo:getFormattedMetadata('fileName') or '?'), srcTag, outPath)
+            end
         end
+    end
 
-        if basePath then
+    -- Pass 2: For the remaining items that need LR rendering, perform renders now.
+    for _, item in ipairs(renderItems) do
+        local rendition = item.rendition
+        local photo = item.photo
+        local choice = item.choice
+
+        local success, pathOrMessage = rendition:waitForRender()
+        if success and pathOrMessage then
+            local basePath = pathOrMessage
+            renderedCount = renderedCount + 1
+            logger:trace(string.format('Rendered from LR: file=%s path=%s reason=%s edited=%s format=%s sibling=%s',
+                tostring(photo and photo:getFormattedMetadata('fileName') or '?'), tostring(basePath), tostring(choice.reason), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath)))
+
             local outPath = basePath
             if props.convertToHEIC then
                 local dest = nil
                 if props.debugAnnotateFilenames then
-                    dest = annotatedHeicPath(basePath, srcTag)
+                    dest = annotatedHeicPath(basePath, 'SRC-LR')
                 end
                 local ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality, destPath = dest })
                 if ok and heicPath then
@@ -146,8 +171,14 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
                     logger:warn(string.format('HEIC conversion failed rc or missing output: from=%s', tostring(basePath)))
                 end
             end
+
             finalPaths[#finalPaths + 1] = outPath
-            decisions[#decisions + 1] = string.format('%s: %s -> %s', (photo and photo:getFormattedMetadata('fileName') or '?'), srcTag, outPath)
+            decisions[#decisions + 1] = string.format('%s: %s -> %s', (photo and photo:getFormattedMetadata('fileName') or '?'), 'SRC-LR', outPath)
+        else
+            rendition:skipRender()
+            local msg = string.format('%s: render failed / skipped (edited=%s, fileFormat=%s, sibling=%s, reason=%s)', (photo and photo:getFormattedMetadata('fileName') or '?'), tostring(choice.edited), tostring(choice.fileFormat), tostring(choice.siblingPath), tostring(choice.reason))
+            decisions[#decisions + 1] = msg
+            logger:warn(msg)
         end
     end
 
