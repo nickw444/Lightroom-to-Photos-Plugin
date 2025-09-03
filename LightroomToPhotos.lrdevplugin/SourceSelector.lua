@@ -5,12 +5,39 @@ local logger = require 'Logger'
 
 local M = {}
 
+local function nonzero(v)
+    return type(v) == 'number' and math.abs(v) > 1e-7
+end
+
 local function safe_has_develop_adjustments(photo)
     if not photo then return false end
+    -- Primary checks that Lightroom provides.
     local ok, val = LrTasks.pcall(function() return photo:hasDevelopAdjustments() end)
     if ok and type(val) == 'boolean' then return val end
     ok, val = LrTasks.pcall(function() return photo:getRawMetadata('hasDevelopAdjustments') end)
     if ok and type(val) == 'boolean' then return val end
+
+    -- Heuristic fallback: inspect develop settings for obvious non-defaults.
+    local okDS, ds = LrTasks.pcall(function() return photo:getDevelopSettings() end)
+    if okDS and type(ds) == 'table' then
+        -- Cropping: presence of crop keys or non-zero angle indicates edits.
+        if ds.CropLeft or ds.CropTop or ds.CropRight or ds.CropBottom or nonzero(ds.CropAngle) then
+            logger:trace('Heuristic: treat as edited due to crop settings')
+            return true
+        end
+        -- Common tone and presence adjustments.
+        local keys = {
+            'Exposure2012','Contrast2012','Highlights2012','Shadows2012','Whites2012','Blacks2012',
+            'Clarity2012','Texture','Dehaze','Vibrance','Saturation','Sharpness','LuminanceSmoothing','ColorNoiseReduction',
+            'GrainAmount','PostCropVignetteAmount'
+        }
+        for _, k in ipairs(keys) do
+            if nonzero(ds[k]) then
+                logger:trace('Heuristic: treat as edited due to nonzero ' .. k)
+                return true
+            end
+        end
+    end
     return false
 end
 
