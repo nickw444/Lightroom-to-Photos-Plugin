@@ -39,8 +39,8 @@ function M.ensureAutomationPermission()
     return runAppleScript([[tell application "Photos" to activate]])
 end
 
--- Import a list of POSIX paths (strings) into Photos, optionally to an album.
-function M.import(paths, albumName)
+-- Import a list of POSIX paths (strings) into Photos, optionally to an album path like 'Lightroom/Edited'.
+function M.import(paths, albumPath)
     if not paths or #paths == 0 then
         return false, 'No paths provided'
     end
@@ -51,27 +51,83 @@ function M.import(paths, albumName)
     end
     local listLiteral = '{ ' .. table.concat(items, ', ') .. ' }'
 
-    local albumLiteral = 'missing value'
-    if albumName and albumName ~= '' then
-        albumLiteral = string.format('%q', albumName)
+    local albumPathLiteral = 'missing value'
+    if albumPath and albumPath ~= '' then
+        albumPathLiteral = string.format('%q', albumPath)
     end
 
     local script = [[
-        on ensure_album(albumName)
+        on ensure_album_path(albumPath)
             tell application "Photos"
-                if albumName is missing value then return missing value
-                set targetAlbum to missing value
-                repeat with a in albums
-                    if name of a is albumName then set targetAlbum to a
+                if albumPath is missing value then return missing value
+                set AppleScript's text item delimiters to "/"
+                set parts to text items of albumPath
+                set AppleScript's text item delimiters to ""
+                if (count of parts) is 0 then return missing value
+                -- locate first non-empty as root
+                set idx to 1
+                repeat while idx ≤ (count of parts) and (item idx of parts) is ""
+                    set idx to idx + 1
                 end repeat
-                if targetAlbum is missing value then set targetAlbum to make new album named albumName
+                if idx > (count of parts) then return missing value
+                set rootName to item idx of parts
+                set idx to idx + 1
+
+                -- find or create top-level folder
+                set targetFolder to missing value
+                try
+                    repeat with f in folders
+                        if name of f is rootName then set targetFolder to f
+                    end repeat
+                end try
+                if targetFolder is missing value then set targetFolder to make new folder named rootName
+
+                -- traverse middle folders
+                set lastIndex to (count of parts)
+                repeat while idx < lastIndex
+                    set partName to item idx of parts
+                    if partName is not "" then
+                        set nextFolder to missing value
+                        try
+                            repeat with f in (folders of targetFolder)
+                                if name of f is partName then set nextFolder to f
+                            end repeat
+                        end try
+                        if nextFolder is missing value then
+                            try
+                                set nextFolder to make new folder named partName in targetFolder
+                            on error
+                                set nextFolder to make new folder named partName
+                            end try
+                        end if
+                        set targetFolder to nextFolder
+                    end if
+                    set idx to idx + 1
+                end repeat
+
+                -- final part is the album name
+                set albumName to item lastIndex of parts
+                if albumName is "" then return missing value
+                set targetAlbum to missing value
+                try
+                    repeat with a in (albums of targetFolder)
+                        if name of a is albumName then set targetAlbum to a
+                    end repeat
+                end try
+                if targetAlbum is missing value then
+                    try
+                        set targetAlbum to make new album named albumName in targetFolder
+                    on error
+                        set targetAlbum to make new album named albumName
+                    end try
+                end if
                 return targetAlbum
             end tell
-        end ensure_album
+        end ensure_album_path
 
         tell application "Photos"
             activate
-            set targetAlbum to my ensure_album(ALBUM_NAME)
+            set targetAlbum to my ensure_album_path(ALBUM_PATH)
             set theFiles to FILE_LIST
             repeat with f in theFiles
                 try
@@ -84,43 +140,90 @@ function M.import(paths, albumName)
         end tell
     ]]
 
-    script = script:gsub('ALBUM_NAME', albumLiteral):gsub('FILE_LIST', listLiteral)
+    script = script:gsub('ALBUM_PATH', albumPathLiteral):gsub('FILE_LIST', listLiteral)
     local ok, rc = runAppleScript(script)
-    logger:info('Photos import rc=' .. tostring(rc) .. ' ok=' .. tostring(ok) .. ' count=' .. tostring(#paths) .. ' album=' .. tostring(albumName))
+    logger:info('Photos import rc=' .. tostring(rc) .. ' ok=' .. tostring(ok) .. ' count=' .. tostring(#paths) .. ' albumPath=' .. tostring(albumPath))
     return ok, rc
 end
 
 -- Attempts to reveal the given album in Photos. Creates it if missing.
-function M.showAlbum(albumName)
-    if not albumName or albumName == '' then return false, 'No album name' end
+function M.showAlbum(albumPath)
+    if not albumPath or albumPath == '' then return false, 'No album path' end
     local script = [[
-        on ensure_album(albumName)
+        on ensure_album_path(albumPath)
             tell application "Photos"
-                if albumName is missing value then return missing value
-                set targetAlbum to missing value
-                repeat with a in albums
-                    if name of a is albumName then set targetAlbum to a
+                if albumPath is missing value then return missing value
+                set AppleScript's text item delimiters to "/"
+                set parts to text items of albumPath
+                set AppleScript's text item delimiters to ""
+                if (count of parts) is 0 then return missing value
+                set idx to 1
+                repeat while idx ≤ (count of parts) and (item idx of parts) is ""
+                    set idx to idx + 1
                 end repeat
-                if targetAlbum is missing value then set targetAlbum to make new album named albumName
+                if idx > (count of parts) then return missing value
+                set rootName to item idx of parts
+                set idx to idx + 1
+                set targetFolder to missing value
+                try
+                    repeat with f in folders
+                        if name of f is rootName then set targetFolder to f
+                    end repeat
+                end try
+                if targetFolder is missing value then set targetFolder to make new folder named rootName
+                set lastIndex to (count of parts)
+                repeat while idx < lastIndex
+                    set partName to item idx of parts
+                    if partName is not "" then
+                        set nextFolder to missing value
+                        try
+                            repeat with f in (folders of targetFolder)
+                                if name of f is partName then set nextFolder to f
+                            end repeat
+                        end try
+                        if nextFolder is missing value then
+                            try
+                                set nextFolder to make new folder named partName in targetFolder
+                            on error
+                                set nextFolder to make new folder named partName
+                            end try
+                        end if
+                        set targetFolder to nextFolder
+                    end if
+                    set idx to idx + 1
+                end repeat
+                set albumName to item lastIndex of parts
+                if albumName is "" then return missing value
+                set targetAlbum to missing value
+                try
+                    repeat with a in (albums of targetFolder)
+                        if name of a is albumName then set targetAlbum to a
+                    end repeat
+                end try
+                if targetAlbum is missing value then
+                    try
+                        set targetAlbum to make new album named albumName in targetFolder
+                    on error
+                        set targetAlbum to make new album named albumName
+                    end try
+                end if
                 return targetAlbum
             end tell
-        end ensure_album
+        end ensure_album_path
 
         tell application "Photos"
             activate
-            set targetAlbum to my ensure_album(ALBUM_NAME)
+            set targetAlbum to my ensure_album_path(ALBUM_PATH)
             try
                 reveal targetAlbum
             on error
-                -- Best effort only; some Photos versions may not support reveal
             end try
         end tell
     ]]
-    script = script:gsub('ALBUM_NAME', string.format('%q', albumName))
+    script = script:gsub('ALBUM_PATH', string.format('%q', albumPath))
     local ok, rc = runAppleScript(script)
-    logger:info('Photos showAlbum rc=' .. tostring(rc) .. ' ok=' .. tostring(ok) .. ' album=' .. tostring(albumName))
+    logger:info('Photos showAlbum rc=' .. tostring(rc) .. ' ok=' .. tostring(ok) .. ' albumPath=' .. tostring(albumPath))
     return ok, rc
 end
 
 return M
-

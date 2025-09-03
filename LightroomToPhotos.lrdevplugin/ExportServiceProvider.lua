@@ -15,7 +15,7 @@ local provider = {}
 provider.startDialog = function(propertyTable)
     if propertyTable.convertToHEIC == nil then propertyTable.convertToHEIC = false end
     if propertyTable.heicQuality == nil then propertyTable.heicQuality = 0.95 end
-    if propertyTable.albumName == nil then propertyTable.albumName = '/Lightroom/Review' end
+    if propertyTable.albumName == nil then propertyTable.albumName = 'Lightroom' end
     if propertyTable.exportToPhotos == nil then propertyTable.exportToPhotos = true end
     if propertyTable.openAlbumAfterImport == nil then propertyTable.openAlbumAfterImport = true end
     if propertyTable.preferCameraJPEG == nil then propertyTable.preferCameraJPEG = true end
@@ -52,7 +52,7 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
                 vf:spacer { height = 8 },
 
                 vf:row { vf:checkbox { title = 'Import to Apple Photos after export', value = bind 'exportToPhotos' } },
-                vf:row { vf:static_text { title = 'Album:', width_in_chars = 18, alignment = 'right' }, vf:edit_field { value = bind 'albumName', width_in_chars = 32 } },
+                vf:row { vf:static_text { title = 'Album folder:', width_in_chars = 18, alignment = 'right' }, vf:edit_field { value = bind 'albumName', width_in_chars = 32 }, vf:static_text { title = 'Creates subalbums “Edited” and “Camera”.' } },
                 vf:row { vf:checkbox { title = 'Open album after import', value = bind 'openAlbumAfterImport' } },
 
                 vf:spacer { height = 8 },
@@ -81,6 +81,8 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     local props = exportContext.propertyTable or {}
 
     local finalPaths = {}
+    local finalEdited = {}
+    local finalCamera = {}
     local heicCount = 0
     local reusedCount = 0
     local renderedCount = 0
@@ -157,26 +159,52 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             end
 
             finalPaths[#finalPaths + 1] = outPath
+            if (srcTag == 'SRC-LR') then
+                finalEdited[#finalEdited + 1] = outPath
+            else
+                finalCamera[#finalCamera + 1] = outPath
+            end
             decisions[#decisions + 1] = string.format('%s: %s -> %s', (photo and photo:getFormattedMetadata('fileName') or '?'), srcTag or 'SRC-UNK', outPath)
         end
     end
 
-    -- Optionally import to Photos
-    local importOk, importRc, albumShown
-    if props.exportToPhotos and #finalPaths > 0 then
-        logger:info('Starting import to Photos, count=' .. tostring(#finalPaths) .. ' album=' .. tostring(props.albumName))
+    -- Optionally import to Photos: split into Edited/Camera under folder
+    local importSummaries = {}
+    local importOkEdited, importRcEdited, importOkCamera, importRcCamera
+    if props.exportToPhotos and (#finalEdited > 0 or #finalCamera > 0) then
         PhotosImporter.ensureAutomationPermission()
-        importOk, importRc = PhotosImporter.import(finalPaths, props.albumName)
-        if importOk and props.openAlbumAfterImport and props.albumName and props.albumName ~= '' then
-            PhotosImporter.showAlbum(props.albumName)
-            albumShown = true
+        local folderPath = tostring(props.albumName or 'Lightroom')
+        -- normalize folder path (strip leading/trailing slashes)
+        folderPath = folderPath:gsub('^/*', ''):gsub('/*$', '')
+
+        if #finalEdited > 0 then
+            local editedPath = folderPath .. '/Edited'
+            logger:info('Import to Photos (Edited): count=' .. tostring(#finalEdited) .. ' albumPath=' .. editedPath)
+            importOkEdited, importRcEdited = PhotosImporter.import(finalEdited, editedPath)
+            if importOkEdited and props.openAlbumAfterImport then
+                PhotosImporter.showAlbum(editedPath)
+            end
+            importSummaries[#importSummaries + 1] = string.format('Edited: %s (rc=%s, %d)', tostring(importOkEdited), tostring(importRcEdited), #finalEdited)
+        end
+        if #finalCamera > 0 then
+            local cameraPath = folderPath .. '/Camera'
+            logger:info('Import to Photos (Camera): count=' .. tostring(#finalCamera) .. ' albumPath=' .. cameraPath)
+            importOkCamera, importRcCamera = PhotosImporter.import(finalCamera, cameraPath)
+            if importOkCamera and props.openAlbumAfterImport then
+                PhotosImporter.showAlbum(cameraPath)
+            end
+            importSummaries[#importSummaries + 1] = string.format('Camera: %s (rc=%s, %d)', tostring(importOkCamera), tostring(importRcCamera), #finalCamera)
         end
     end
 
     LrFunctionContext.postAsyncTaskWithContext('LTP_Wireframe_ExportDone', function()
         local importSummary = ''
         if props.exportToPhotos then
-            importSummary = string.format('\nImported to Photos: %s (rc=%s)%s', tostring(importOk), tostring(importRc), albumShown and ' and opened album' or '')
+            if #importSummaries > 0 then
+                importSummary = '\nImported to Photos: ' .. table.concat(importSummaries, '; ')
+            else
+                importSummary = '\nImported to Photos: none'
+            end
         end
         local summary = string.format('Processed %d photo(s). Rendered: %d, Reused JPEG: %d, HEIC conversions: %d.%s', totalCount, renderedCount, reusedCount, heicCount, importSummary)
         logger:info('Export summary: ' .. summary)
