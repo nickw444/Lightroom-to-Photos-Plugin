@@ -67,6 +67,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
 
     local finalPaths = {}
     local finalEdited = {}
+    local finalCamera = {}
     local heicCount = 0
     local reusedCount = 0
     local renderedCount = 0
@@ -152,6 +153,8 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             finalPaths[#finalPaths + 1] = outPath
             if srcTag == 'SRC-LR' then
                 finalEdited[#finalEdited + 1] = outPath
+            else
+                finalCamera[#finalCamera + 1] = outPath
             end
             decisions[#decisions + 1] = string.format('%s: %s -> %s', (photo and photo:getFormattedMetadata('fileName') or '?'), srcTag or 'SRC-UNK', outPath)
         end
@@ -160,30 +163,40 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     -- import to Photos
     local importOk, importRc, albumShown
     local importEditedOk, importEditedRc, editedAlbumShown
-    if #finalPaths > 0 then
-        logger:info('Starting import to Photos, count=' .. tostring(#finalPaths) .. ' album=' .. tostring(props.albumName))
-        PhotosImporter.ensureAutomationPermission()
-        importOk, importRc = PhotosImporter.import(finalPaths, props.albumName)
+    PhotosImporter.ensureAutomationPermission()
+    -- Import unedited/camera items into primary album
+    if #finalCamera > 0 then
+        logger:info('Import to Photos (primary): count=' .. tostring(#finalCamera) .. ' album=' .. tostring(props.albumName))
+        importOk, importRc = PhotosImporter.import(finalCamera, props.albumName)
         if importOk and props.openAlbumAfterImport and props.albumName and props.albumName ~= '' then
             PhotosImporter.showAlbum(props.albumName)
             albumShown = true
         end
-        if props.editedAlbumName and props.editedAlbumName ~= '' and #finalEdited > 0 then
-            logger:info('Importing edited photos to secondary album, count=' .. tostring(#finalEdited) .. ' album=' .. tostring(props.editedAlbumName))
-            importEditedOk, importEditedRc = PhotosImporter.import(finalEdited, props.editedAlbumName)
-            if importEditedOk and props.openAlbumAfterImport then
-                PhotosImporter.showAlbum(props.editedAlbumName)
-                editedAlbumShown = true
-            end
+    end
+    -- Import edited items into edited album if provided; otherwise into library only
+    if #finalEdited > 0 then
+        local editedTarget = props.editedAlbumName or ''
+        logger:info('Import edited to Photos: count=' .. tostring(#finalEdited) .. ' album=' .. (editedTarget ~= '' and editedTarget or '(library)'))
+        importEditedOk, importEditedRc = PhotosImporter.import(finalEdited, editedTarget)
+        if importEditedOk and props.openAlbumAfterImport and editedTarget ~= '' then
+            PhotosImporter.showAlbum(editedTarget)
+            editedAlbumShown = true
         end
     end
 
     LrFunctionContext.postAsyncTaskWithContext('LTP_Wireframe_ExportDone', function()
-        local importSummary = ''
-        importSummary = string.format('\nImported to Photos: %s (rc=%s)%s', tostring(importOk), tostring(importRc), albumShown and ' and opened album' or '')
-        if props.editedAlbumName and props.editedAlbumName ~= '' and #finalEdited > 0 then
-            importSummary = importSummary .. string.format('\nEdited album: %s (rc=%s)%s', tostring(importEditedOk), tostring(importEditedRc), editedAlbumShown and ' and opened album' or '')
+        local lines = {}
+        if #finalCamera > 0 then
+            lines[#lines + 1] = string.format('Primary album: %s (rc=%s)%s', tostring(importOk), tostring(importRc), albumShown and ' and opened album' or '')
         end
+        if #finalEdited > 0 then
+            if props.editedAlbumName and props.editedAlbumName ~= '' then
+                lines[#lines + 1] = string.format('Edited album: %s (rc=%s)%s', tostring(importEditedOk), tostring(importEditedRc), editedAlbumShown and ' and opened album' or '')
+            else
+                lines[#lines + 1] = string.format('Edited (library only): %s (rc=%s)', tostring(importEditedOk), tostring(importEditedRc))
+            end
+        end
+        local importSummary = (#lines > 0) and ('\n' .. table.concat(lines, '\n')) or ''
         local summary = string.format('Processed %d photo(s). Rendered: %d, Reused JPEG: %d, HEIC conversions: %d.%s', totalCount, renderedCount, reusedCount, heicCount, importSummary)
         logger:info('Export summary: ' .. summary)
         LrDialogs.message(
