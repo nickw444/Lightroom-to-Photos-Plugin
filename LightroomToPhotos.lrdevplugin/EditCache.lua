@@ -44,6 +44,7 @@ function M.editedDestFor(photo, quality, origPath)
   local canon = canonicalize_develop_settings(okDS and ds or {})
   local key = photo_uuid(photo) .. '|' .. tostring(qInt) .. '|' .. canon
   local digest = Hash.md5(key)
+  local short = string.sub(digest or '', 1, 12) -- truncate for nicer filenames
   local dir = LrPathUtils.parent(origPath or '') or LrPathUtils.getStandardFilePath('temp')
   local hiddenDir = LrPathUtils.child(dir, '.photos-heic')
   if not LrFileUtils.exists(hiddenDir) then
@@ -51,7 +52,7 @@ function M.editedDestFor(photo, quality, origPath)
   end
   local leaf = LrPathUtils.leafName(origPath or 'photo')
   local stem = leaf:gsub('%.[^%.]+$', '')
-  local name = string.format('%s__EDIT-%s-Q%02d.HEIC', stem, digest, qInt)
+  local name = string.format('%s__EDIT-%s-Q%02d.HEIC', stem, short, qInt)
   return LrPathUtils.child(hiddenDir, name)
 end
 
