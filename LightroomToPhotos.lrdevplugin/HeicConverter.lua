@@ -39,9 +39,10 @@ function M.convert(srcPath, opts)
         destPath = LrPathUtils.child(dir, stem .. '.HEIC')
     end
 
-    local percent = math.floor(q * 100 + 0.5)
-    if percent < 1 then percent = 1 end
-    if percent > 100 then percent = 100 end
+  -- Use floor to avoid off-by-one vs. UI label (80% should be 80)
+  local percent = math.floor(q * 100 + 1e-6)
+  if percent < 1 then percent = 1 end
+  if percent > 100 then percent = 100 end
 
     local cmd = "/usr/bin/sips -s format heic -s formatOptions " .. tostring(percent) ..
         " " .. shell_quote(srcPath) .. " --out " .. shell_quote(destPath)

@@ -39,7 +39,8 @@ end
 
 function M.editedDestFor(photo, quality, origPath)
   local q = tonumber(quality) or 0.8
-  local qInt = math.floor(q * 100 + 0.5)
+  -- Use floor to match UI and converter (avoid 80% -> 81)
+  local qInt = math.floor(q * 100 + 1e-6)
   local okDS, ds = LrTasks.pcall(function() return photo:getDevelopSettings() end)
   local canon = canonicalize_develop_settings(okDS and ds or {})
   local key = photo_uuid(photo) .. '|' .. tostring(qInt) .. '|' .. canon
@@ -52,7 +53,7 @@ function M.editedDestFor(photo, quality, origPath)
   end
   local leaf = LrPathUtils.leafName(origPath or 'photo')
   local stem = leaf:gsub('%.[^%.]+$', '')
-  local name = string.format('%s__EDIT-%s-Q%02d.HEIC', stem, short, qInt)
+  local name = string.format('%s-EDIT-%sQ%02d.HEIC', stem, short, qInt)
   return LrPathUtils.child(hiddenDir, name)
 end
 
