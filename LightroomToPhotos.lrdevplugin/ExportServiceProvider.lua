@@ -20,7 +20,6 @@ provider.startDialog = function(propertyTable)
     if propertyTable.openAlbumAfterImport == nil then propertyTable.openAlbumAfterImport = true end
     if propertyTable.preferCameraJPEG == nil then propertyTable.preferCameraJPEG = true end
     if propertyTable.forceCameraJPEGIfSibling == nil then propertyTable.forceCameraJPEGIfSibling = false end
-    if propertyTable.debugAnnotateFilenames == nil then propertyTable.debugAnnotateFilenames = false end
 
     -- Encourage Lightroom to render to a temp location and not prompt on collisions
     if propertyTable.LR_export_destinationType == nil then propertyTable.LR_export_destinationType = 'temporary' end
@@ -36,7 +35,6 @@ provider.exportPresetFields = {
     { key = 'openAlbumAfterImport', default = true },
     { key = 'preferCameraJPEG', default = true },
     { key = 'forceCameraJPEGIfSibling', default = false },
-    { key = 'debugAnnotateFilenames', default = false },
 }
 
 provider.sectionsForTopOfDialog = function(vf, propertyTable)
@@ -65,7 +63,6 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
                 },
 
                 vf:spacer { height = 6 },
-                vf:row { vf:checkbox { title = 'Annotate filenames with source (debug)', value = bind 'debugAnnotateFilenames' } },
                 vf:spacer { height = 8 },
                 vf:static_text { title = 'Wireframe: Export runs and optionally creates HEIC copies. Import to Photos is supported.' },
             },
@@ -86,25 +83,10 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     local renderedCount = 0
     local decisions = {}
 
-    logger:info(string.format('Export started: preferCameraJPEG=%s forceCameraJPEGIfSibling=%s convertToHEIC=%s quality=%.2f annotate=%s',
-        tostring(props.preferCameraJPEG), tostring(props.forceCameraJPEGIfSibling), tostring(props.convertToHEIC), tonumber(props.heicQuality or 0), tostring(props.debugAnnotateFilenames)))
+    logger:info(string.format('Export started: preferCameraJPEG=%s forceCameraJPEGIfSibling=%s convertToHEIC=%s quality=%.2f',
+        tostring(props.preferCameraJPEG), tostring(props.forceCameraJPEGIfSibling), tostring(props.convertToHEIC), tonumber(props.heicQuality or 0)))
 
-    local function annotatedHeicPath(srcPath, tag)
-        local tempDir = LrPathUtils.getStandardFilePath('temp')
-        local leaf = LrPathUtils.leafName(srcPath or 'file')
-        local stem = leaf:gsub('%.[^%.]+$', '')
-        local function candidate(i)
-            local suffix = (i and i > 0) and ('-' .. tostring(i)) or ''
-            return LrPathUtils.child(tempDir, string.format('%s__%s%s.HEIC', stem, tag, suffix))
-        end
-        local i = 0
-        local dest = candidate(i)
-        while LrFileUtils.exists(dest) do
-            i = i + 1
-            dest = candidate(i)
-        end
-        return dest
-    end
+    -- No debug filename annotation; rely on HeicConverter default output path.
 
     local totalCount = 0
     -- Simpler, robust approach: always call waitForRender() to keep LR happy,
@@ -142,11 +124,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
 
             local outPath = basePath
             if props.convertToHEIC and basePath then
-                local dest = nil
-                if props.debugAnnotateFilenames then
-                    dest = annotatedHeicPath(basePath, srcTag)
-                end
-                local ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality, destPath = dest })
+                local ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality })
                 if ok and heicPath then
                     outPath = heicPath
                     heicCount = heicCount + 1
