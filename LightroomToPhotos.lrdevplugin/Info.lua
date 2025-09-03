@@ -13,13 +13,7 @@ return {
     -- Plug-in Manager info panel
     LrPluginInfoProvider = 'PluginManager.lua',
 
-    -- Simple menu item to verify loading
-    LrLibraryMenuItems = {
-        {
-            title = 'Lightroom to Photos: Hello',
-            file = 'Main.lua',
-        },
-    },
+    -- No debug menu items in production build
 
     -- Export service
     LrExportServiceProvider = {

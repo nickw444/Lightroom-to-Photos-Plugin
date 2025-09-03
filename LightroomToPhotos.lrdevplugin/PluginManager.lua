@@ -9,7 +9,6 @@ function provider.sectionsForTopOfDialog(vf, _)
             vf:column {
                 spacing = vf:control_spacing(),
                 vf:static_text { title = 'Plugin loaded.' },
-                vf:static_text { title = 'Use Plug-in Extras > “Lightroom to Photos: Hello” to verify.' },
             },
         },
     }

@@ -60,8 +60,7 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
                 },
 
                 vf:spacer { height = 6 },
-                vf:spacer { height = 8 },
-                vf:static_text { title = 'Wireframe: Export runs and optionally creates HEIC copies. Import to Photos is supported.' },
+                -- No debug copy in production UI.
             },
         },
     }
