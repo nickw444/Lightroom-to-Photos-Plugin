@@ -22,12 +22,16 @@ end
 -- Convert an input image to HEIC using macOS sips.
 -- opts = { quality = 0.75, destPath = optional }
 function M.convert(srcPath, opts)
-    opts = opts or {}
-    local q = tonumber(opts.quality) or 0.75
-    if q < 0 then q = 0 end
-    if q > 1 then q = 1 end
+  opts = opts or {}
+  local q = tonumber(opts.quality) or 0.75
+  if q < 0 then q = 0 end
+  if q > 1 then q = 1 end
 
-    local destPath = ensure_dest_path(opts.destPath)
+  local destPath = ensure_dest_path(opts.destPath)
+  if destPath and LrFileUtils.exists(destPath) then
+    logger:trace('HeicConverter: reuse existing ' .. tostring(destPath))
+    return true, destPath
+  end
     if not destPath then
         local base = LrPathUtils.leafName(srcPath or 'file')
         local stem = base:gsub('%.[^%.]+$', '')

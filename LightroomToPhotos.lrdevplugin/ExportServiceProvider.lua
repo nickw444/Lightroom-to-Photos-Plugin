@@ -120,7 +120,29 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
 
             local outPath = basePath
             if props.convertToHEIC and basePath then
-                local ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality })
+                local ok, heicPath
+                if srcTag == 'SRC-CAM' then
+                    -- For unedited photos using camera JPEG, generate/reuse HEIC alongside the JPEG
+                    local dir = LrPathUtils.parent(basePath)
+                    local leaf = LrPathUtils.leafName(basePath)
+                    local stem = leaf:gsub('%.[^%.]+$', '')
+                    local siblingHeic = LrPathUtils.child(dir, stem .. '.HEIC')
+                    if LrFileUtils.exists(siblingHeic) then
+                        logger:info('Reuse existing HEIC sibling: ' .. tostring(siblingHeic))
+                        ok, heicPath = true, siblingHeic
+                    else
+                        ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality, destPath = siblingHeic })
+                        if not ok then
+                            -- Fallback to temp location if writing beside JPEG fails
+                            logger:warn('Failed to create sibling HEIC, falling back to temp for ' .. tostring(basePath))
+                            ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality })
+                        end
+                    end
+                else
+                    -- Edited photos: convert to temp
+                    ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality })
+                end
+
                 if ok and heicPath then
                     outPath = heicPath
                     heicCount = heicCount + 1
