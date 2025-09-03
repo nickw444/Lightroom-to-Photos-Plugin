@@ -34,10 +34,13 @@ local function safe_has_develop_adjustments(photo)
             return true
         end
         -- Common tone and presence adjustments.
+        -- Note: Ignore default sharpening/noise reduction baselines (e.g., Sharpness=40, ColorNoiseReduction=25)
+        -- which are applied to many RAW files by default and should not count as edits.
         local keys = {
             'Exposure2012','Contrast2012','Highlights2012','Shadows2012','Whites2012','Blacks2012',
-            'Clarity2012','Texture','Dehaze','Vibrance','Saturation','Sharpness','LuminanceSmoothing','ColorNoiseReduction',
-            'GrainAmount','PostCropVignetteAmount'
+            'Clarity2012','Texture','Dehaze','Vibrance','Saturation',
+            -- exclude 'Sharpness', 'ColorNoiseReduction'
+            'LuminanceSmoothing', 'GrainAmount','PostCropVignetteAmount'
         }
         for _, k in ipairs(keys) do
             local v = tonumber(ds[k])
@@ -45,6 +48,13 @@ local function safe_has_develop_adjustments(photo)
                 logger:trace('Heuristic: treat as edited due to nonzero ' .. k .. '=' .. tostring(v))
                 return true
             end
+        end
+        -- Special-case known defaults: ignore Sharpness<=40, ColorNoiseReduction<=25
+        local sharp = tonumber(ds.Sharpness) or 0
+        local cnr = tonumber(ds.ColorNoiseReduction) or 0
+        if (sharp > 40 + 1e-6) or (cnr > 25 + 1e-6) then
+            logger:trace(string.format('Heuristic: treat as edited due to non-default sharpening/noise (Sharpness=%.1f, ColorNR=%.1f)', sharp, cnr))
+            return true
         end
     end
     return false
