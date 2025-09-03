@@ -7,6 +7,7 @@ local LrFunctionContext = import 'LrFunctionContext'
 local HeicConverter = require 'HeicConverter'
 local SourceSelector = require 'SourceSelector'
 local PhotosImporter = require 'PhotosImporter'
+local EditCache = require 'EditCache'
 local logger = require 'Logger'
 
 local provider = {}
@@ -134,8 +135,15 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
                         end
                     end
                 else
-                    -- Edited photos: convert to temp
-                    ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality })
+                    local orig = choice.origPath or (photo and (function()
+                        local okp, p = LrTasks.pcall(function() return photo:getRawMetadata('path') end)
+                        return okp and p or nil
+                    end)())
+                    local dest = nil
+                    if orig then
+                        dest = EditCache.editedDestFor(photo, props.heicQuality, orig)
+                    end
+                    ok, heicPath = HeicConverter.convert(basePath, { quality = props.heicQuality, destPath = dest })
                 end
 
                 if ok and heicPath then
