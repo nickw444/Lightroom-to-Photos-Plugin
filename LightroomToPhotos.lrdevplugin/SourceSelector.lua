@@ -20,9 +20,17 @@ local function safe_has_develop_adjustments(photo)
     -- Heuristic fallback: inspect develop settings for obvious non-defaults.
     local okDS, ds = LrTasks.pcall(function() return photo:getDevelopSettings() end)
     if okDS and type(ds) == 'table' then
-        -- Cropping: presence of crop keys or non-zero angle indicates edits.
-        if ds.CropLeft or ds.CropTop or ds.CropRight or ds.CropBottom or nonzero(ds.CropAngle) then
-            logger:trace('Heuristic: treat as edited due to crop settings')
+        -- Cropping: only treat as edited if explicit HasCrop true, or angle non-zero,
+        -- or crop bounds differ from defaults (0,0,1,1) by a meaningful margin.
+        local hasCrop = (type(ds.HasCrop) == 'boolean' and ds.HasCrop == true)
+        local angle = tonumber(ds.CropAngle)
+        local left = tonumber(ds.CropLeft) or 0
+        local top = tonumber(ds.CropTop) or 0
+        local right = tonumber(ds.CropRight) or 1
+        local bottom = tonumber(ds.CropBottom) or 1
+        local cropDiffers = (left > 1e-6) or (top > 1e-6) or (right < 1 - 1e-6) or (bottom < 1 - 1e-6)
+        if hasCrop or nonzero(angle) or cropDiffers then
+            logger:trace(string.format('Heuristic: treat as edited due to crop (HasCrop=%s angle=%s LTRB=%.6f,%.6f,%.6f,%.6f)', tostring(hasCrop), tostring(angle), left, top, right, bottom))
             return true
         end
         -- Common tone and presence adjustments.
@@ -32,8 +40,9 @@ local function safe_has_develop_adjustments(photo)
             'GrainAmount','PostCropVignetteAmount'
         }
         for _, k in ipairs(keys) do
-            if nonzero(ds[k]) then
-                logger:trace('Heuristic: treat as edited due to nonzero ' .. k)
+            local v = tonumber(ds[k])
+            if nonzero(v) then
+                logger:trace('Heuristic: treat as edited due to nonzero ' .. k .. '=' .. tostring(v))
                 return true
             end
         end
