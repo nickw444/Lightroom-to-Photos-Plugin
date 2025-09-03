@@ -1,14 +1,15 @@
 local LrFileUtils = import 'LrFileUtils'
 local LrPathUtils = import 'LrPathUtils'
+local LrTasks = import 'LrTasks'
 local logger = require 'Logger'
 
 local M = {}
 
 local function safe_has_develop_adjustments(photo)
     if not photo then return false end
-    local ok, val = pcall(function() return photo:hasDevelopAdjustments() end)
+    local ok, val = LrTasks.pcall(function() return photo:hasDevelopAdjustments() end)
     if ok and type(val) == 'boolean' then return val end
-    ok, val = pcall(function() return photo:getRawMetadata('hasDevelopAdjustments') end)
+    ok, val = LrTasks.pcall(function() return photo:getRawMetadata('hasDevelopAdjustments') end)
     if ok and type(val) == 'boolean' then return val end
     return false
 end
@@ -34,7 +35,7 @@ local function sibling_jpeg_for(path, dir, stem)
 end
 
 local function get_dir_and_stem(photo)
-    local okPath, origPath = pcall(function() return photo:getRawMetadata('path') end)
+    local okPath, origPath = LrTasks.pcall(function() return photo:getRawMetadata('path') end)
     if okPath and origPath and LrFileUtils.exists(origPath) then
         local dir = LrPathUtils.parent(origPath)
         local leaf = LrPathUtils.leafName(origPath)
@@ -42,8 +43,8 @@ local function get_dir_and_stem(photo)
         return dir, stem, origPath
     end
 
-    local okFolder, folder = pcall(function() return photo:getRawMetadata('folder') end)
-    local okName, fileName = pcall(function() return photo:getFormattedMetadata('fileName') end)
+    local okFolder, folder = LrTasks.pcall(function() return photo:getRawMetadata('folder') end)
+    local okName, fileName = LrTasks.pcall(function() return photo:getFormattedMetadata('fileName') end)
     if okFolder and folder and okName and fileName then
         local dir = folder:getPath()
         local stem = fileName:gsub('%.[^%.]+$', '')
@@ -59,14 +60,14 @@ function M.choose(photo, opts)
     if not photo then return { useRendered = true, reason = 'no photo' } end
 
     local edited = safe_has_develop_adjustments(photo)
-    local okFmt, fileFormat = pcall(function() return photo:getRawMetadata('fileFormat') end)
+    local okFmt, fileFormat = LrTasks.pcall(function() return photo:getRawMetadata('fileFormat') end)
     local dir, stem, origPath = get_dir_and_stem(photo)
     local sibling = sibling_jpeg_for(origPath, dir, stem)
-    local okName, fileName = pcall(function() return photo:getFormattedMetadata('fileName') end)
+    local okName, fileName = LrTasks.pcall(function() return photo:getFormattedMetadata('fileName') end)
 
     logger:trace(string.format(
-        'SourceSelector.choose: file=%s edited=%s fileFormat=%s origPath=%s sibling=%s preferCameraJPEG=%s forceIfSibling=%s',
-        tostring(okName and fileName or '?'), tostring(edited), tostring(okFmt and fileFormat or '?'), tostring(origPath), tostring(sibling), tostring(opts.preferCameraJPEG), tostring(opts.forceIfSibling)
+        'SourceSelector.choose: file=%s edited=%s fileFormat=%s origPath=%s dir=%s stem=%s sibling=%s preferCameraJPEG=%s forceIfSibling=%s',
+        tostring(okName and fileName or '?'), tostring(edited), tostring(okFmt and fileFormat or '?'), tostring(origPath), tostring(dir), tostring(stem), tostring(sibling), tostring(opts.preferCameraJPEG), tostring(opts.forceIfSibling)
     ))
 
     -- For unedited images, prefer camera JPEG if available.
