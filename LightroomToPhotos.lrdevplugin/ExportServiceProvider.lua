@@ -13,10 +13,10 @@ local provider = {}
 
 -- Called when the Export dialog opens.
 provider.startDialog = function(propertyTable)
-    if propertyTable.convertToHEIC == nil then propertyTable.convertToHEIC = false end
-    if propertyTable.heicQuality == nil then propertyTable.heicQuality = 0.95 end
-    if propertyTable.albumName == nil then propertyTable.albumName = '/Lightroom/Review' end
-    if propertyTable.exportToPhotos == nil then propertyTable.exportToPhotos = true end
+    if propertyTable.convertToHEIC == nil then propertyTable.convertToHEIC = true end
+    if propertyTable.heicQuality == nil then propertyTable.heicQuality = 0.8 end
+    if propertyTable.albumName == nil then propertyTable.albumName = 'Lightroom Exports' end
+    if propertyTable.editedAlbumName == nil then propertyTable.editedAlbumName = '' end
     if propertyTable.openAlbumAfterImport == nil then propertyTable.openAlbumAfterImport = true end
     if propertyTable.preferCameraJPEG == nil then propertyTable.preferCameraJPEG = true end
 
@@ -27,10 +27,10 @@ end
 
 -- Fields we may persist in presets later.
 provider.exportPresetFields = {
-    { key = 'convertToHEIC', default = false },
-    { key = 'heicQuality', default = 0.95 },
-    { key = 'albumName', default = '/Lightroom/Review' },
-    { key = 'exportToPhotos', default = true },
+    { key = 'convertToHEIC', default = true },
+    { key = 'heicQuality', default = 0.8 },
+    { key = 'albumName', default = 'Lightroom Exports' },
+    { key = 'editedAlbumName', default = '' },
     { key = 'openAlbumAfterImport', default = true },
     { key = 'preferCameraJPEG', default = true },
 }
@@ -42,25 +42,17 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
             title = 'Lightroom to Photos',
             vf:column {
                 spacing = vf:control_spacing(),
-
-                vf:row { vf:checkbox { title = 'Prefer camera JPEG when no edits', value = bind 'preferCameraJPEG' } },
-                vf:spacer { height = 8 },
-
-                vf:row { vf:checkbox { title = 'Import to Apple Photos after export', value = bind 'exportToPhotos' } },
-                vf:row { vf:static_text { title = 'Album:', width_in_chars = 18, alignment = 'right' }, vf:edit_field { value = bind 'albumName', width_in_chars = 32 } },
-                vf:row { vf:checkbox { title = 'Open album after import', value = bind 'openAlbumAfterImport' } },
-
-                vf:spacer { height = 8 },
+                vf:row { vf:checkbox { title = 'Prefer camera JPEG when no edits', value = bind 'preferCameraJPEG' } },                
                 vf:row {
                     vf:checkbox { title = 'Convert to HEIC (via sips)', value = bind 'convertToHEIC' },
                     vf:spacer { width = 12 },
                     vf:static_text { title = 'Quality' },
                     vf:slider { value = bind 'heicQuality', min = 0.6, max = 1.0 },
-                    vf:static_text { title = bind({ key = 'heicQuality', transform = function(v) return string.format('%d%%', math.floor((tonumber(v) or 0.95)*100)) end }) },
+                    vf:static_text { title = bind({ key = 'heicQuality', transform = function(v) return string.format('%d%%', math.floor((tonumber(v) or 0.8)*100)) end }) },
                 },
-
-                vf:spacer { height = 6 },
-                -- No debug copy in production UI.
+                vf:row { vf:static_text { title = 'Album Name:', width_in_chars = 18 }, vf:edit_field { value = bind 'albumName', width_in_chars = 32 } },
+                vf:row { vf:static_text { title = 'Edited Album (optional):', width_in_chars = 18 }, vf:edit_field { value = bind 'editedAlbumName', width_in_chars = 32 } },
+                vf:row { vf:checkbox { title = 'Open album after import', value = bind 'openAlbumAfterImport' } },
             },
         },
     }
@@ -74,6 +66,7 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     local props = exportContext.propertyTable or {}
 
     local finalPaths = {}
+    local finalEdited = {}
     local heicCount = 0
     local reusedCount = 0
     local renderedCount = 0
@@ -157,13 +150,17 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             end
 
             finalPaths[#finalPaths + 1] = outPath
+            if srcTag == 'SRC-LR' then
+                finalEdited[#finalEdited + 1] = outPath
+            end
             decisions[#decisions + 1] = string.format('%s: %s -> %s', (photo and photo:getFormattedMetadata('fileName') or '?'), srcTag or 'SRC-UNK', outPath)
         end
     end
 
-    -- Optionally import to Photos
+    -- import to Photos
     local importOk, importRc, albumShown
-    if props.exportToPhotos and #finalPaths > 0 then
+    local importEditedOk, importEditedRc, editedAlbumShown
+    if #finalPaths > 0 then
         logger:info('Starting import to Photos, count=' .. tostring(#finalPaths) .. ' album=' .. tostring(props.albumName))
         PhotosImporter.ensureAutomationPermission()
         importOk, importRc = PhotosImporter.import(finalPaths, props.albumName)
@@ -171,12 +168,21 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
             PhotosImporter.showAlbum(props.albumName)
             albumShown = true
         end
+        if props.editedAlbumName and props.editedAlbumName ~= '' and #finalEdited > 0 then
+            logger:info('Importing edited photos to secondary album, count=' .. tostring(#finalEdited) .. ' album=' .. tostring(props.editedAlbumName))
+            importEditedOk, importEditedRc = PhotosImporter.import(finalEdited, props.editedAlbumName)
+            if importEditedOk and props.openAlbumAfterImport then
+                PhotosImporter.showAlbum(props.editedAlbumName)
+                editedAlbumShown = true
+            end
+        end
     end
 
     LrFunctionContext.postAsyncTaskWithContext('LTP_Wireframe_ExportDone', function()
         local importSummary = ''
-        if props.exportToPhotos then
-            importSummary = string.format('\nImported to Photos: %s (rc=%s)%s', tostring(importOk), tostring(importRc), albumShown and ' and opened album' or '')
+        importSummary = string.format('\nImported to Photos: %s (rc=%s)%s', tostring(importOk), tostring(importRc), albumShown and ' and opened album' or '')
+        if props.editedAlbumName and props.editedAlbumName ~= '' and #finalEdited > 0 then
+            importSummary = importSummary .. string.format('\nEdited album: %s (rc=%s)%s', tostring(importEditedOk), tostring(importEditedRc), editedAlbumShown and ' and opened album' or '')
         end
         local summary = string.format('Processed %d photo(s). Rendered: %d, Reused JPEG: %d, HEIC conversions: %d.%s', totalCount, renderedCount, reusedCount, heicCount, importSummary)
         logger:info('Export summary: ' .. summary)
