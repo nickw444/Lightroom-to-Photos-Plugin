@@ -91,34 +91,6 @@ function M.import(paths, albumName)
 end
 
 -- Attempts to reveal the given album in Photos. Creates it if missing.
-function M.showAlbum(albumName)
-    if not albumName or albumName == '' then return false, 'No album name' end
-    local script = [[
-        on ensure_album(albumName)
-            tell application "Photos"
-                if albumName is missing value then return missing value
-                set targetAlbum to missing value
-                repeat with a in albums
-                    if name of a is albumName then set targetAlbum to a
-                end repeat
-                if targetAlbum is missing value then set targetAlbum to make new album named albumName
-                return targetAlbum
-            end tell
-        end ensure_album
-
-        tell application "Photos"
-            activate
-            set targetAlbum to my ensure_album(ALBUM_NAME)
-            try
-                reveal targetAlbum
-            on error
-            end try
-        end tell
-    ]]
-    script = script:gsub('ALBUM_NAME', string.format('%q', albumName))
-    local ok, rc = runAppleScript(script)
-    logger:info('Photos showAlbum rc=' .. tostring(rc) .. ' ok=' .. tostring(ok) .. ' album=' .. tostring(albumName))
-    return ok, rc
-end
+-- No 'open album' functionality to keep plugin minimal
 
 return M

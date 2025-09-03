@@ -17,7 +17,6 @@ provider.startDialog = function(propertyTable)
     if propertyTable.heicQuality == nil then propertyTable.heicQuality = 0.8 end
     if propertyTable.albumName == nil then propertyTable.albumName = 'Lightroom Exports' end
     if propertyTable.editedAlbumName == nil then propertyTable.editedAlbumName = '' end
-    if propertyTable.openAlbumAfterImport == nil then propertyTable.openAlbumAfterImport = true end
     if propertyTable.preferCameraJPEG == nil then propertyTable.preferCameraJPEG = true end
 
     -- Encourage Lightroom to render to a temp location and not prompt on collisions
@@ -31,7 +30,6 @@ provider.exportPresetFields = {
     { key = 'heicQuality', default = 0.8 },
     { key = 'albumName', default = 'Lightroom Exports' },
     { key = 'editedAlbumName', default = '' },
-    { key = 'openAlbumAfterImport', default = true },
     { key = 'preferCameraJPEG', default = true },
 }
 
@@ -52,7 +50,6 @@ provider.sectionsForTopOfDialog = function(vf, propertyTable)
                 },
                 vf:row { vf:static_text { title = 'Album Name:', width_in_chars = 18 }, vf:edit_field { value = bind 'albumName', width_in_chars = 32 } },
                 vf:row { vf:static_text { title = 'Edited Album (optional):', width_in_chars = 18 }, vf:edit_field { value = bind 'editedAlbumName', width_in_chars = 32 } },
-                vf:row { vf:checkbox { title = 'Open album after import', value = bind 'openAlbumAfterImport' } },
             },
         },
     }
@@ -161,37 +158,31 @@ provider.processRenderedPhotos = function(functionContext, exportContext)
     end
 
     -- import to Photos
-    local importOk, importRc, albumShown
-    local importEditedOk, importEditedRc, editedAlbumShown
+    local importOk, importRc
+    local importEditedOk, importEditedRc
     PhotosImporter.ensureAutomationPermission()
     -- Import unedited/camera items into primary album
     if #finalCamera > 0 then
         logger:info('Import to Photos (primary): count=' .. tostring(#finalCamera) .. ' album=' .. tostring(props.albumName))
         importOk, importRc = PhotosImporter.import(finalCamera, props.albumName)
-        if importOk and props.openAlbumAfterImport and props.albumName and props.albumName ~= '' then
-            PhotosImporter.showAlbum(props.albumName)
-            albumShown = true
-        end
+        
     end
     -- Import edited items into edited album if provided; otherwise into library only
     if #finalEdited > 0 then
         local editedTarget = props.editedAlbumName or ''
         logger:info('Import edited to Photos: count=' .. tostring(#finalEdited) .. ' album=' .. (editedTarget ~= '' and editedTarget or '(library)'))
         importEditedOk, importEditedRc = PhotosImporter.import(finalEdited, editedTarget)
-        if importEditedOk and props.openAlbumAfterImport and editedTarget ~= '' then
-            PhotosImporter.showAlbum(editedTarget)
-            editedAlbumShown = true
-        end
+        
     end
 
     LrFunctionContext.postAsyncTaskWithContext('LTP_Wireframe_ExportDone', function()
         local lines = {}
         if #finalCamera > 0 then
-            lines[#lines + 1] = string.format('Primary album: %s (rc=%s)%s', tostring(importOk), tostring(importRc), albumShown and ' and opened album' or '')
+            lines[#lines + 1] = string.format('Primary album: %s (rc=%s)', tostring(importOk), tostring(importRc))
         end
         if #finalEdited > 0 then
             if props.editedAlbumName and props.editedAlbumName ~= '' then
-                lines[#lines + 1] = string.format('Edited album: %s (rc=%s)%s', tostring(importEditedOk), tostring(importEditedRc), editedAlbumShown and ' and opened album' or '')
+                lines[#lines + 1] = string.format('Edited album: %s (rc=%s)', tostring(importEditedOk), tostring(importEditedRc))
             else
                 lines[#lines + 1] = string.format('Edited (library only): %s (rc=%s)', tostring(importEditedOk), tostring(importEditedRc))
             end
