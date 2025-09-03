@@ -1,0 +1,84 @@
+local LrFileUtils = import 'LrFileUtils'
+local LrPathUtils = import 'LrPathUtils'
+
+local M = {}
+
+local function safe_has_develop_adjustments(photo)
+    if not photo then return false end
+    local ok, val = pcall(function() return photo:hasDevelopAdjustments() end)
+    if ok and type(val) == 'boolean' then return val end
+    ok, val = pcall(function() return photo:getRawMetadata('hasDevelopAdjustments') end)
+    if ok and type(val) == 'boolean' then return val end
+    return false
+end
+
+local function sibling_jpeg_for(path, dir, stem)
+    local s
+    if path then
+        s = path:gsub('%.[^%.]+$', '')
+    else
+        if not (dir and stem) then return nil end
+        s = LrPathUtils.child(dir, stem)
+    end
+
+    local cand1 = s .. '.JPG'
+    local cand2 = s .. '.jpg'
+    local cand3 = s .. '.JPEG'
+    local cand4 = s .. '.jpeg'
+    if LrFileUtils.exists(cand1) then return cand1 end
+    if LrFileUtils.exists(cand2) then return cand2 end
+    if LrFileUtils.exists(cand3) then return cand3 end
+    if LrFileUtils.exists(cand4) then return cand4 end
+    return nil
+end
+
+local function get_dir_and_stem(photo)
+    local okPath, origPath = pcall(function() return photo:getRawMetadata('path') end)
+    if okPath and origPath and LrFileUtils.exists(origPath) then
+        local dir = LrPathUtils.parent(origPath)
+        local leaf = LrPathUtils.leafName(origPath)
+        local stem = leaf:gsub('%.[^%.]+$', '')
+        return dir, stem, origPath
+    end
+
+    local okFolder, folder = pcall(function() return photo:getRawMetadata('folder') end)
+    local okName, fileName = pcall(function() return photo:getFormattedMetadata('fileName') end)
+    if okFolder and folder and okName and fileName then
+        local dir = folder:getPath()
+        local stem = fileName:gsub('%.[^%.]+$', '')
+        return dir, stem, origPath
+    end
+    return nil, nil, origPath
+end
+
+-- Decide whether to render from Lightroom or reuse camera JPEG.
+-- Returns table: { useRendered = boolean, sourcePath = string|nil, edited, fileFormat, origPath, siblingPath, reason }
+function M.choose(photo, opts)
+    opts = opts or {}
+    if not photo then return { useRendered = true, reason = 'no photo' } end
+
+    local edited = safe_has_develop_adjustments(photo)
+    local okFmt, fileFormat = pcall(function() return photo:getRawMetadata('fileFormat') end)
+    local dir, stem, origPath = get_dir_and_stem(photo)
+    local sibling = sibling_jpeg_for(origPath, dir, stem)
+
+    -- For unedited images, prefer camera JPEG if available.
+    if not edited then
+        if okFmt and fileFormat == 'JPEG' and origPath and LrFileUtils.exists(origPath) then
+            return { useRendered = false, sourcePath = origPath, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'catalog JPEG (no edits)' }
+        end
+        if sibling then
+            return { useRendered = false, sourcePath = sibling, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'sibling JPEG (no edits)' }
+        end
+    end
+
+    -- Debug/override: force sibling JPEG regardless of edits if present.
+    if opts.forceIfSibling and sibling then
+        return { useRendered = false, sourcePath = sibling, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = 'forced sibling JPEG' }
+    end
+
+    return { useRendered = true, edited = edited, fileFormat = fileFormat, origPath = origPath, siblingPath = sibling, reason = edited and 'edited' or 'no sibling JPEG' }
+end
+
+return M
+
